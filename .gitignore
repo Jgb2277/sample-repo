@@ -9,6 +9,11 @@ web-build/
 .env.*.local
 backend/.venv/
 backend/__pycache__/
+backend/.pytest_cache/
+backend/.env
+web-dashboard/node_modules/
+web-dashboard/dist/
+web-dashboard/.env
 *.pem
 *.key
 

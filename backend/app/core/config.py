@@ -17,10 +17,27 @@ class Settings(BaseSettings):
     GOOGLE_MAPS_SERVER_API_KEY: str = ""
 
     model_config = SettingsConfigDict(
-        env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env"),
+        env_file=(
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env"),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), ".env"),
+            ".env",
+        ),
         env_file_encoding="utf-8",
         extra="ignore"
     )
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def validate_database_url(cls, v: str) -> str:
+        if v.startswith("sqlite"):
+            raise ValueError(
+                "SQLite is strictly disallowed in DineGo. PostgreSQL (postgresql+asyncpg://...) is the only supported database."
+            )
+        if not (v.startswith("postgresql+asyncpg://") or v.startswith("postgresql://")):
+            raise ValueError(
+                "DATABASE_URL must be a PostgreSQL connection URL (e.g. postgresql+asyncpg://user:pass@host:port/dbname)."
+            )
+        return v
 
     @field_validator("SECRET_KEY")
     @classmethod

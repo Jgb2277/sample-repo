@@ -45,3 +45,4 @@ class HealthResponse(BaseModel):
     app: str
     version: str
     environment: str
+    database: Optional[str] = None

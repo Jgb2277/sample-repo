@@ -32,7 +32,7 @@ export default function TabsLayout() {
             <Ionicons
               name={focused ? 'compass' : 'compass-outline'}
               size={size}
-              color={color}
+              color={typeof color === 'string' ? color : undefined}
             />
           ),
         }}
@@ -45,7 +45,7 @@ export default function TabsLayout() {
             <Ionicons
               name={focused ? 'map' : 'map-outline'}
               size={size}
-              color={color}
+              color={typeof color === 'string' ? color : undefined}
             />
           ),
         }}
@@ -58,7 +58,7 @@ export default function TabsLayout() {
             <Ionicons
               name={focused ? 'calendar' : 'calendar-outline'}
               size={size}
-              color={color}
+              color={typeof color === 'string' ? color : undefined}
             />
           ),
         }}
@@ -71,7 +71,7 @@ export default function TabsLayout() {
             <Ionicons
               name={focused ? 'person' : 'person-outline'}
               size={size}
-              color={color}
+              color={typeof color === 'string' ? color : undefined}
             />
           ),
         }}
