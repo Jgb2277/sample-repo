@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,9 @@ import {
   ScrollView,
   Pressable,
   Image,
+  Platform,
 } from 'react-native';
+import MapView, { Marker, Polyline, PROVIDER_DEFAULT, Region } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -16,15 +18,67 @@ import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { DemoBanner } from '../../components/DemoBanner';
 import { DEMO_MODE } from '../../config';
 
+// ---------------------------------------------------------------------------
+// Geographically accurate coordinates for NH 66 Kochi → Kozhikode corridor
+// These are SAMPLE / DEMO coordinates aligned with actual highway positions.
+// ---------------------------------------------------------------------------
+const ORIGIN_COORD = { latitude: 10.0307, longitude: 76.3031 }; // Edappally, Kochi
+const DEST_COORD   = { latitude: 11.2588, longitude: 75.7804 }; // Kozhikode city
+
+/** Sample coordinates for each restaurant stop along NH 66 (DEMO DATA) */
+const RESTAURANT_COORDS: Record<string, { latitude: number; longitude: number }> = {
+  'sample-1': { latitude: 10.0372, longitude: 76.2903 }, // Near Edappally Toll, Kochi – KM 18
+  'sample-2': { latitude: 10.2325, longitude: 76.1987 }, // Kodungallur coastal link – KM 52
+  'sample-3': { latitude: 10.6667, longitude: 76.1000 }, // Kuttippuram bypass – KM 98
+  'sample-4': { latitude: 10.8700, longitude: 75.9800 }, // Valanchery, Malappuram – KM 135
+  'sample-5': { latitude: 11.1886, longitude: 75.8286 }, // Ramanattukara, Kozhikode – KM 168
+};
+
+// Straight-line waypoints approximating NH 66; NOT a Directions API polyline.
+// Labelled PREVIEW — see notice banner in the UI.
+const ROUTE_PREVIEW_COORDS = [
+  ORIGIN_COORD,
+  RESTAURANT_COORDS['sample-1'],
+  RESTAURANT_COORDS['sample-2'],
+  RESTAURANT_COORDS['sample-3'],
+  RESTAURANT_COORDS['sample-4'],
+  RESTAURANT_COORDS['sample-5'],
+  DEST_COORD,
+];
+
+const INITIAL_REGION: Region = {
+  latitude:      10.6447, // midpoint of corridor
+  longitude:     76.0437,
+  latitudeDelta:  1.55,
+  longitudeDelta: 0.90,
+};
+
 export default function RouteMapTabRoute() {
   const { routeSearch } = useBooking();
   const [selectedStopId, setSelectedStopId] = useState<string>('sample-1');
+  const mapRef = useRef<MapView>(null);
 
   const selectedRestaurant: RestaurantData | undefined =
     MOCK_RESTAURANTS.find((r) => r.id === selectedStopId) || MOCK_RESTAURANTS[0];
 
   const handleOpenRestaurant = (restaurantId: string) => {
     router.push(`/restaurant/${restaurantId}`);
+  };
+
+  const handleMarkerPress = (restaurantId: string) => {
+    setSelectedStopId(restaurantId);
+    const coord = RESTAURANT_COORDS[restaurantId];
+    if (coord && mapRef.current) {
+      mapRef.current.animateToRegion(
+        {
+          latitude:      coord.latitude - 0.04,
+          longitude:     coord.longitude,
+          latitudeDelta:  0.18,
+          longitudeDelta: 0.12,
+        },
+        400,
+      );
+    }
   };
 
   return (
@@ -57,118 +111,126 @@ export default function RouteMapTabRoute() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Visual Route Corridor Map Preview */}
-        <View style={styles.mapCanvasCard}>
-          <View style={styles.mapCanvasHeader}>
-            <View style={styles.mapCanvasHeaderLeft}>
-              <Ionicons name="compass" size={16} color={colors.brandPrimary} />
-              <Text style={styles.mapCanvasTitle}>Interactive Highway Corridor</Text>
-            </View>
-            <View style={styles.sampleMapBadge}>
-              <Text style={styles.sampleMapBadgeText}>MOCK ROUTE PREVIEW</Text>
-            </View>
+      {/* ------------------------------------------------------------------ */}
+      {/* Interactive Map                                                      */}
+      {/* ------------------------------------------------------------------ */}
+      <View style={styles.mapWrapper}>
+        <MapView
+          ref={mapRef}
+          style={styles.map}
+          provider={PROVIDER_DEFAULT}
+          initialRegion={INITIAL_REGION}
+          showsUserLocation={false}
+          showsCompass={true}
+          showsScale={Platform.OS === 'ios'}
+          mapType="standard"
+          accessibilityLabel="NH 66 highway corridor map with restaurant pitstop markers"
+        >
+          {/* Origin marker */}
+          <Marker
+            coordinate={ORIGIN_COORD}
+            title="Departure"
+            description={routeSearch.from || MOCK_HIGHWAY_ROUTE.from}
+            pinColor={colors.brandPrimary}
+            accessibilityLabel="Departure point"
+          />
+
+          {/* Destination marker */}
+          <Marker
+            coordinate={DEST_COORD}
+            title="Destination"
+            description={routeSearch.destination || MOCK_HIGHWAY_ROUTE.destination}
+            pinColor={colors.success}
+            accessibilityLabel="Destination point"
+          />
+
+          {/* Restaurant pitstop markers */}
+          {MOCK_RESTAURANTS.map((restaurant) => {
+            const coord = RESTAURANT_COORDS[restaurant.id];
+            if (!coord) return null;
+            const isSelected = selectedStopId === restaurant.id;
+            return (
+              <Marker
+                key={restaurant.id}
+                coordinate={coord}
+                title={restaurant.name}
+                description={`${restaurant.cuisine} · ⭐ ${restaurant.rating} · ${restaurant.offRouteKm} km off route`}
+                onPress={() => handleMarkerPress(restaurant.id)}
+                pinColor={isSelected ? '#FF6B35' : '#FFB59D'}
+                accessibilityLabel={`Restaurant marker: ${restaurant.name}`}
+              />
+            );
+          })}
+
+          {/* Straight-line preview polyline — NOT a real driving route */}
+          <Polyline
+            coordinates={ROUTE_PREVIEW_COORDS}
+            strokeColor={colors.brandPrimary}
+            strokeWidth={2.5}
+            lineDashPattern={[8, 5]}
+          />
+        </MapView>
+
+        {/* Map legend overlay */}
+        <View style={styles.mapLegend}>
+          <View style={styles.legendRow}>
+            <View style={[styles.legendDot, { backgroundColor: colors.brandPrimary }]} />
+            <Text style={styles.legendText}>Origin</Text>
           </View>
-
-          <Text style={styles.mapInstructions}>
-            Tap a highway stop below to preview detour time and available table slots.
-          </Text>
-
-          {/* Visual Route Path Line */}
-          <View style={styles.corridorPathContainer}>
-            {/* Start Node */}
-            <View style={styles.pathNodeRow}>
-              <View style={styles.pathIndicatorCol}>
-                <View style={styles.startCircle}>
-                  <Ionicons name="navigate" size={12} color={colors.onBrand} />
-                </View>
-                <View style={styles.verticalSpine} />
-              </View>
-              <View style={styles.pathNodeInfo}>
-                <Text style={styles.nodeLocation}>
-                  {routeSearch.from || MOCK_HIGHWAY_ROUTE.from} (Departure)
-                </Text>
-                <Text style={styles.nodeKm}>KM 0 · Corridor Start</Text>
-              </View>
-            </View>
-
-            {/* Restaurant Stops along highway */}
-            {MOCK_HIGHWAY_ROUTE.stops.map((stop, index) => {
-              const isSelected = selectedStopId === stop.restaurantId;
-              const isLast = index === MOCK_HIGHWAY_ROUTE.stops.length - 1;
-
-              return (
-                <Pressable
-                  key={stop.restaurantId}
-                  style={styles.pathNodeRow}
-                  onPress={() => setSelectedStopId(stop.restaurantId)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Select pitstop ${stop.restaurantName}`}
-                >
-                  <View style={styles.pathIndicatorCol}>
-                    <View
-                      style={[
-                        styles.stopPinCircle,
-                        isSelected && styles.stopPinCircleActive,
-                      ]}
-                    >
-                      <Ionicons
-                        name="restaurant"
-                        size={12}
-                        color={isSelected ? colors.onBrand : colors.brandPrimary}
-                      />
-                    </View>
-                    <View style={styles.verticalSpine} />
-                  </View>
-
-                  <View
-                    style={[
-                      styles.stopNodeCard,
-                      isSelected && styles.stopNodeCardActive,
-                    ]}
-                  >
-                    <View style={styles.stopNodeTop}>
-                      <Text
-                        style={[
-                          styles.stopNodeName,
-                          isSelected && styles.stopNodeNameActive,
-                        ]}
-                      >
-                        {stop.restaurantName}
-                      </Text>
-                      <View style={styles.kmBadge}>
-                        <Text style={styles.kmBadgeText}>KM {stop.km}</Text>
-                      </View>
-                    </View>
-
-                    <Text style={styles.stopNodeLocation}>{stop.location}</Text>
-                    <View style={styles.stopDetourRow}>
-                      <Ionicons name="git-branch" size={12} color="#FCD34D" />
-                      <Text style={styles.stopDetourText}>{stop.detour}</Text>
-                    </View>
-                  </View>
-                </Pressable>
-              );
-            })}
-
-            {/* Destination Node */}
-            <View style={styles.pathNodeRow}>
-              <View style={styles.pathIndicatorCol}>
-                <View style={styles.destCircle}>
-                  <Ionicons name="location" size={12} color={colors.onBrand} />
-                </View>
-              </View>
-              <View style={styles.pathNodeInfo}>
-                <Text style={styles.nodeLocation}>
-                  {routeSearch.destination || MOCK_HIGHWAY_ROUTE.destination} (Destination)
-                </Text>
-                <Text style={styles.nodeKm}>KM {routeSearch.distanceKm || 178} · Trip Arrival</Text>
-              </View>
-            </View>
+          <View style={styles.legendRow}>
+            <View style={[styles.legendDot, { backgroundColor: '#FFB59D' }]} />
+            <Text style={styles.legendText}>Pitstop</Text>
+          </View>
+          <View style={styles.legendRow}>
+            <View style={[styles.legendDot, { backgroundColor: colors.success }]} />
+            <Text style={styles.legendText}>Dest.</Text>
           </View>
         </View>
 
-        {/* Selected Stop Details Preview Drawer */}
+        {/* Route preview notice — honest labelling */}
+        <View style={styles.routePreviewBadge}>
+          <Ionicons name="git-branch-outline" size={10} color={colors.warningText} />
+          <Text style={styles.routePreviewBadgeText}>ROUTE PREVIEW · NOT A DRIVING ROUTE</Text>
+        </View>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Stop selector strip */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.stopStrip}
+        >
+          {MOCK_HIGHWAY_ROUTE.stops.map((stop) => {
+            const isSelected = selectedStopId === stop.restaurantId;
+            return (
+              <Pressable
+                key={stop.restaurantId}
+                style={[styles.stopChip, isSelected && styles.stopChipActive]}
+                onPress={() => handleMarkerPress(stop.restaurantId)}
+                accessibilityRole="button"
+                accessibilityLabel={`Select pitstop ${stop.restaurantName}`}
+              >
+                <Ionicons
+                  name="restaurant"
+                  size={11}
+                  color={isSelected ? colors.onBrand : colors.brandPrimary}
+                />
+                <Text style={[styles.stopChipText, isSelected && styles.stopChipTextActive]}>
+                  {stop.restaurantName.split(' ').slice(0, 2).join(' ')}
+                </Text>
+                <View style={styles.kmBadge}>
+                  <Text style={styles.kmBadgeText}>KM {stop.km}</Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        {/* Selected Stop Details Drawer */}
         {selectedRestaurant && (
           <View style={styles.selectedStopCard}>
             <View style={styles.drawerHeader}>
@@ -218,20 +280,25 @@ export default function RouteMapTabRoute() {
                 accessibilityRole="button"
                 accessibilityLabel={`View and reserve at ${selectedRestaurant.name}`}
               >
-                <Text style={styles.drawerBookBtnText}>View & Reserve</Text>
+                <Text style={styles.drawerBookBtnText}>View &amp; Reserve</Text>
                 <Ionicons name="arrow-forward" size={15} color={colors.onBrand} />
               </Pressable>
             </View>
           </View>
         )}
 
-        {/* Future Google Maps Integration Notice */}
-        <View style={styles.gmapsNotice}>
-          <Ionicons name="map-outline" size={20} color={colors.partnerAccent} />
+        {/* Map integration info notice */}
+        <View style={styles.mapInfoNotice}>
+          <Ionicons name="information-circle-outline" size={18} color={colors.partnerAccent} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.gmapsNoticeTitle}>Google Maps Platform Integration</Text>
-            <Text style={styles.gmapsNoticeSubtitle}>
-              Phase 2 connects Google Directions API (polylines & live traffic ETA) and Places API (corridor spatial queries). All markers above link to working reservation flows.
+            <Text style={styles.mapInfoTitle}>
+              {Platform.OS === 'ios' ? 'Apple Maps · Demo Data' : 'Google Maps · Demo Data'}
+            </Text>
+            <Text style={styles.mapInfoSubtitle}>
+              Map tiles via {Platform.OS === 'ios' ? 'Apple Maps' : 'Google Maps'}. Restaurant
+              markers and route preview use sample coordinates for the NH 66 corridor — not live
+              Google Places results. A dashed line connects stops as a preview only, not a computed
+              driving route.
             </Text>
           </View>
         </View>
@@ -245,6 +312,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+
+  /* ── Header ── */
   routeHeader: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
@@ -306,150 +375,101 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     color: colors.brandSecondary,
   },
-  scrollContent: {
-    padding: spacing.lg,
-    paddingBottom: 40,
-    gap: spacing.lg,
+
+  /* ── Map ── */
+  mapWrapper: {
+    height: 260,
+    position: 'relative',
+    backgroundColor: colors.surfaceMid,
   },
-  mapCanvasCard: {
-    backgroundColor: colors.surfaceLow,
-    borderRadius: radius.xl,
-    padding: spacing.md,
+  map: {
+    ...StyleSheet.absoluteFill,
+  },
+  mapLegend: {
+    position: 'absolute',
+    top: spacing.sm,
+    left: spacing.sm,
+    backgroundColor: 'rgba(14,13,12,0.82)',
+    borderRadius: radius.md,
+    padding: spacing.xs,
+    gap: 4,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
   },
-  mapCanvasHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  mapCanvasHeaderLeft: {
+  legendRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
-  mapCanvasTitle: {
-    fontSize: typography.fontSize.sm,
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    fontSize: 9,
     fontFamily: typography.fontFamily.bold,
     color: colors.foreground,
   },
-  sampleMapBadge: {
+  routePreviewBadge: {
+    position: 'absolute',
+    bottom: spacing.sm,
+    right: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: colors.warningBg,
     borderColor: colors.warningBorder,
     borderWidth: 1,
     borderRadius: radius.pill,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
   },
-  sampleMapBadgeText: {
+  routePreviewBadgeText: {
+    fontSize: 8,
+    fontFamily: typography.fontFamily.bold,
     color: colors.warningText,
-    fontSize: 9,
-    fontFamily: typography.fontFamily.bold,
+    letterSpacing: 0.3,
   },
-  mapInstructions: {
-    fontSize: 11,
-    fontFamily: typography.fontFamily.regular,
-    color: colors.mutedForeground,
-    marginBottom: spacing.md,
+
+  /* ── Scroll body ── */
+  scrollContent: {
+    padding: spacing.lg,
+    paddingBottom: 40,
+    gap: spacing.lg,
   },
-  corridorPathContainer: {
-    paddingLeft: spacing.xs,
+
+  /* ── Stop strip ── */
+  stopStrip: {
+    gap: spacing.sm,
+    paddingRight: spacing.lg,
   },
-  pathNodeRow: {
+  stopChip: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  pathIndicatorCol: {
     alignItems: 'center',
-    width: 32,
-  },
-  startCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: radius.pill,
-    backgroundColor: colors.brandPrimary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  destCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: radius.pill,
-    backgroundColor: colors.success,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stopPinCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: radius.pill,
+    gap: 5,
     backgroundColor: colors.surfaceMid,
-    borderWidth: 1.5,
-    borderColor: colors.brandPrimary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stopPinCircleActive: {
-    backgroundColor: colors.brandPrimary,
-    borderColor: colors.brandSecondary,
-    transform: [{ scale: 1.15 }],
-  },
-  verticalSpine: {
-    width: 2,
-    flex: 1,
-    minHeight: 28,
-    backgroundColor: colors.borderSubtle,
-    marginVertical: 2,
-  },
-  pathNodeInfo: {
-    flex: 1,
-    paddingLeft: spacing.sm,
-    paddingBottom: spacing.md,
-    justifyContent: 'center',
-  },
-  nodeLocation: {
-    fontSize: typography.fontSize.xs,
-    fontFamily: typography.fontFamily.bold,
-    color: colors.foreground,
-  },
-  nodeKm: {
-    fontSize: 10,
-    fontFamily: typography.fontFamily.regular,
-    color: colors.mutedForeground,
-    marginTop: 1,
-  },
-  stopNodeCard: {
-    flex: 1,
-    backgroundColor: colors.surfaceMid,
-    borderRadius: radius.md,
+    borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
-    padding: spacing.sm,
-    marginLeft: spacing.sm,
-    marginBottom: spacing.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
   },
-  stopNodeCardActive: {
-    borderColor: colors.brandPrimary,
-    backgroundColor: 'rgba(255, 107, 53, 0.08)',
+  stopChipActive: {
+    backgroundColor: colors.brandPrimary,
+    borderColor: colors.brandSecondary,
   },
-  stopNodeTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  stopNodeName: {
-    fontSize: typography.fontSize.xs,
+  stopChipText: {
+    fontSize: 11,
     fontFamily: typography.fontFamily.bold,
-    color: colors.foreground,
-    flex: 1,
-  },
-  stopNodeNameActive: {
     color: colors.brandPrimary,
+  },
+  stopChipTextActive: {
+    color: colors.onBrand,
   },
   kmBadge: {
     backgroundColor: colors.surfaceLow,
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: radius.xs,
   },
@@ -458,23 +478,8 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     color: colors.brandSecondary,
   },
-  stopNodeLocation: {
-    fontSize: 11,
-    fontFamily: typography.fontFamily.regular,
-    color: colors.mutedForeground,
-    marginTop: 2,
-  },
-  stopDetourRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-  },
-  stopDetourText: {
-    fontSize: 10,
-    fontFamily: typography.fontFamily.medium,
-    color: '#FCD34D',
-  },
+
+  /* ── Selected stop drawer ── */
   selectedStopCard: {
     backgroundColor: colors.surfaceLow,
     borderRadius: radius.xl,
@@ -590,7 +595,9 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     color: colors.onBrand,
   },
-  gmapsNotice: {
+
+  /* ── Map info notice ── */
+  mapInfoNotice: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing.md,
@@ -600,12 +607,12 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(123, 208, 255, 0.25)',
     padding: spacing.md,
   },
-  gmapsNoticeTitle: {
+  mapInfoTitle: {
     fontSize: typography.fontSize.xs,
     fontFamily: typography.fontFamily.bold,
     color: colors.partnerAccent,
   },
-  gmapsNoticeSubtitle: {
+  mapInfoSubtitle: {
     fontSize: 11,
     fontFamily: typography.fontFamily.regular,
     color: colors.secondaryForeground,
