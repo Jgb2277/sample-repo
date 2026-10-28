@@ -79,21 +79,28 @@ export default function ProfileTabRoute() {
           )}
         </View>
 
-        {/* Partner Web Dashboard Notice (for Restaurant Owners) */}
-        {role === 'owner' && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Restaurant Management</Text>
-            <View style={styles.partnerCard}>
-              <Ionicons name="globe-outline" size={24} color={colors.partnerAccent} />
-              <View style={styles.partnerCardText}>
-                <Text style={styles.partnerCardTitle}>Web Dashboard Portal</Text>
-                <Text style={styles.partnerCardSub}>
-                  Table management, live kitchen seat allocation, and real-time corridor traveller analytics are planned for the Phase 4 dedicated web portal.
-                </Text>
-              </View>
+        {/* Restaurant Management / Partner Portal */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Restaurant Partner Portal</Text>
+          <TouchableOpacity
+            style={styles.partnerCard}
+            onPress={() => router.push('/owner/dashboard')}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Open restaurant owner dashboard"
+          >
+            <Ionicons name="business-outline" size={24} color={colors.partnerAccent} />
+            <View style={styles.partnerCardText}>
+              <Text style={styles.partnerCardTitle}>
+                {role === 'owner' ? 'Open Owner Dashboard' : 'Preview Partner Dashboard (Demo)'}
+              </Text>
+              <Text style={styles.partnerCardSub}>
+                Table availability, live kitchen queue, incoming highway orders, and instant menu stock controls.
+              </Text>
             </View>
-          </View>
-        )}
+            <Ionicons name="chevron-forward" size={18} color={colors.partnerAccent} />
+          </TouchableOpacity>
+        </View>
 
         {/* App Info */}
         <View style={styles.section}>
@@ -102,14 +109,14 @@ export default function ProfileTabRoute() {
             <Ionicons name="phone-portrait-outline" size={20} color={colors.mutedForeground} />
             <View style={styles.infoCol}>
               <Text style={styles.infoLabel}>Framework</Text>
-              <Text style={styles.infoValue}>Expo SDK 57 (Expo Router)</Text>
+              <Text style={styles.infoValue}>Expo SDK 58 (Expo Router)</Text>
             </View>
           </View>
           <View style={styles.infoRow}>
             <Ionicons name="code-slash-outline" size={20} color={colors.mutedForeground} />
             <View style={styles.infoCol}>
               <Text style={styles.infoLabel}>Runtime</Text>
-              <Text style={styles.infoValue}>React Native 0.86.3</Text>
+              <Text style={styles.infoValue}>React Native 0.88.0</Text>
             </View>
           </View>
         </View>

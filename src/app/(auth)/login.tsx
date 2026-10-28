@@ -14,9 +14,13 @@ export default function LoginRoute() {
   const { selectedRole, setSelectedRole, signIn } = useAuth();
 
   const handleSignedIn = async (user: AuthUser) => {
-    // Sync state with AuthProvider and redirect to main tabs
+    // Sync state with AuthProvider and redirect according to selected role
     await signIn(user.email, '');
-    router.replace('/home');
+    if (selectedRole === 'owner') {
+      router.replace('/owner/dashboard');
+    } else {
+      router.replace('/home');
+    }
   };
 
   const handleRegister = () => {

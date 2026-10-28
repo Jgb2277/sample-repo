@@ -16,6 +16,9 @@ export default function EntryIndex() {
   }
 
   if (user) {
+    if (user.role === 'owner') {
+      return <Redirect href="/owner/dashboard" />;
+    }
     return <Redirect href="/home" />;
   }
 
